@@ -1,0 +1,5 @@
+node_modules/
+music-console-pwa.zip
+.DS_Store
+__pycache__/
+*.py[cod]

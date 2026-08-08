@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#202020" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="触摸乐器" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./app-icon.svg" type="image/svg+xml" />
+    <title>触摸乐器</title>
+    <script type="module" crossorigin src="./assets/index-BB85ylOf.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-Bt2mv0av.css">
+  </head>
+  <body>
+    <main id="app-shell" class="app-shell">
+      <header class="top-bar">
+        <button id="app-menu-button" class="top-beat-button" data-beat="1" type="button" aria-expanded="false" aria-controls="app-menu">菜单</button>
+        <button class="top-beat-button" data-beat="2" type="button" aria-label="占位 2" disabled>—</button>
+        <button
+          id="metronome-button"
+          class="top-beat-button"
+          data-beat="3"
+          data-mode="off"
+          type="button"
+          aria-label="节拍器：关"
+        >节拍器 关</button>
+        <button id="release-touches-button" class="top-beat-button" data-beat="4" type="button">脱困</button>
+        <output id="archive-status" class="visually-hidden" aria-live="polite"></output>
+        <div id="app-menu" class="app-menu" hidden>
+          <button id="undo-button" type="button" disabled>撤销</button>
+          <button id="redo-button" type="button" disabled>重做</button>
+          <button id="clear-track-button" type="button">清除当前轨道</button>
+          <button id="archive-button" type="button">保存检查点</button>
+          <span id="autosave-status" class="autosave-status">自动保存准备中</span>
+        </div>
+      </header>
+
+      <h1 class="visually-hidden">触摸乐器</h1>
+
+      <section id="performance-view" class="instrument" aria-labelledby="surface-label">
+        <h2 id="surface-label" class="visually-hidden">演奏区</h2>
+        <div
+          id="touch-surface"
+          class="touch-surface"
+          role="application"
+          aria-label="横向轻触或拖动来演奏音高"
+        >
+          <div id="glow-layer" class="glow-layer" aria-hidden="true"></div>
+          <div id="touch-input-layer" class="touch-input-layer" aria-hidden="true"></div>
+        </div>
+        <p id="note-status" class="visually-hidden" aria-live="polite">轻触或横向拖动来演奏</p>
+      </section>
+
+      <div
+        id="song-split-handle"
+        class="song-split-handle"
+        role="separator"
+        aria-label="调整演奏区和编排区的比例"
+        aria-orientation="horizontal"
+        aria-valuemin="20"
+        aria-valuemax="80"
+        aria-valuenow="62"
+        tabindex="0"
+        hidden
+      ><span aria-hidden="true"></span></div>
+
+      <nav id="instrument-switcher" class="instrument-switcher" aria-label="乐器层">
+        <button type="button" data-instrument="melody" aria-pressed="true">
+          <span class="track-loop-visual" aria-hidden="true"><svg class="track-loop-chart" viewBox="0 0 100 100" preserveAspectRatio="none"><path class="track-loop-path"></path></svg><span class="track-loop-dividers"></span><span class="track-loop-playhead"></span></span>
+          <span class="track-state-indicators" aria-hidden="true"><span class="track-state-indicator solo">S</span><span class="track-state-indicator mute">M</span></span>
+        </button>
+        <button type="button" data-instrument="bass" aria-pressed="false">
+          <span class="track-loop-visual" aria-hidden="true"><svg class="track-loop-chart" viewBox="0 0 100 100" preserveAspectRatio="none"><path class="track-loop-path"></path></svg><span class="track-loop-dividers"></span><span class="track-loop-playhead"></span></span>
+          <span class="track-state-indicators" aria-hidden="true"><span class="track-state-indicator solo">S</span><span class="track-state-indicator mute">M</span></span>
+        </button>
+        <button type="button" data-instrument="chord" aria-pressed="false">
+          <span class="track-loop-visual" aria-hidden="true"><svg class="track-loop-chart" viewBox="0 0 100 100" preserveAspectRatio="none"><path class="track-loop-path"></path></svg><span class="track-loop-dividers"></span><span class="track-loop-playhead"></span></span>
+          <span class="track-state-indicators" aria-hidden="true"><span class="track-state-indicator solo">S</span><span class="track-state-indicator mute">M</span></span>
+        </button>
+        <button type="button" data-instrument="sfx" aria-pressed="false">
+          <span class="track-loop-visual" aria-hidden="true"><svg class="track-loop-chart" viewBox="0 0 100 100" preserveAspectRatio="none"><path class="track-loop-path"></path></svg><span class="track-loop-dividers"></span><span class="track-loop-playhead"></span></span>
+          <span class="track-state-indicators" aria-hidden="true"><span class="track-state-indicator solo">S</span><span class="track-state-indicator mute">M</span></span>
+        </button>
+        <button type="button" data-instrument="drums" aria-pressed="false">
+          <span class="track-loop-visual" aria-hidden="true"><svg class="track-loop-chart" viewBox="0 0 100 100" preserveAspectRatio="none"><path class="track-loop-path"></path></svg><span class="track-loop-dividers"></span><span class="track-loop-playhead"></span></span>
+          <span class="track-state-indicators" aria-hidden="true"><span class="track-state-indicator solo">S</span><span class="track-state-indicator mute">M</span></span>
+        </button>
+      </nav>
+
+      <nav id="song-section-switcher" class="song-section-switcher" aria-label="歌曲段落" hidden>
+        <button type="button" data-section="intro" aria-pressed="true">Intro</button>
+        <button type="button" data-section="verse" aria-pressed="false">Verse</button>
+        <button type="button" data-section="pre-chorus" aria-pressed="false">Pre-Cho</button>
+        <button type="button" data-section="chorus" aria-pressed="false">Chorus</button>
+        <button type="button" data-section="bridge" aria-pressed="false">Bridge</button>
+        <button type="button" data-section="outro" aria-pressed="false">Outro</button>
+      </nav>
+
+      <section id="song-arranger" class="song-arranger" aria-label="Song Mode Section Arranging" hidden>
+        <div id="song-timeline-viewport" class="song-timeline-viewport">
+          <div id="song-timeline-content" class="song-timeline-content">
+            <div id="song-ruler" class="song-ruler" aria-label="Section 小节与循环范围">
+              <div id="song-section-loop-range" class="song-section-loop-range" role="group" aria-label="Section 循环范围">
+                <span id="song-section-loop-start" class="song-section-loop-handle is-start" role="slider" aria-label="循环开头" aria-orientation="horizontal" tabindex="0"></span>
+                <span class="song-section-loop-line" aria-hidden="true"></span>
+                <span id="song-section-loop-end" class="song-section-loop-handle is-end" role="slider" aria-label="循环结尾" aria-orientation="horizontal" tabindex="0"></span>
+              </div>
+            </div>
+            <div id="song-track-lanes" class="song-track-lanes"></div>
+            <span id="song-playhead" class="song-playhead" aria-hidden="true"></span>
+            <div id="song-clip-split-marker" class="song-clip-split-marker" role="separator" aria-label="拖动选择分割位置" aria-orientation="vertical" tabindex="0" hidden>
+              <span aria-hidden="true"></span>
+            </div>
+            <div id="song-loop-length-ghost" class="song-loop-length-ghost" aria-hidden="true" hidden></div>
+            <div id="song-loop-length-marker" class="song-loop-length-marker" role="slider" aria-label="拖动调整 Loop 单次长度" aria-orientation="horizontal" tabindex="0" hidden>
+              <span aria-hidden="true"></span>
+            </div>
+          </div>
+        </div>
+        <span class="song-overflow-shadow" aria-hidden="true"></span>
+        <div id="song-clip-menu" class="song-clip-menu" hidden>
+          <button id="length-song-clip-button" type="button">长度</button>
+          <button id="merge-song-clip-button" type="button">合并</button>
+          <button id="split-song-clip-button" type="button">分割</button>
+          <button id="delete-song-clip-button" type="button">删除</button>
+        </div>
+        <div id="song-clip-split-actions" class="song-clip-split-actions" hidden>
+          <button id="cancel-song-split-button" type="button">取消</button>
+          <button id="confirm-song-split-button" type="button">确认分割</button>
+        </div>
+        <div id="song-loop-length-actions" class="song-loop-length-actions" hidden>
+          <button id="cancel-song-loop-length-button" type="button">取消</button>
+          <button id="confirm-song-loop-length-button" type="button">确认长度</button>
+        </div>
+        <div id="song-loop-picker" class="song-loop-picker" role="dialog" aria-label="选择 Loop" hidden>
+          <div id="song-loop-picker-list" class="song-loop-picker-list" role="listbox" aria-label="当前轨道的 Loop"></div>
+        </div>
+      </section>
+
+      <section class="control-panel" aria-label="功能面板">
+        <div id="function-grid" class="function-grid">
+          <button id="scale-menu-button" type="button"></button>
+          <button id="record-button" class="record-button" type="button" aria-pressed="false">录制</button>
+          <button id="current-instrument-button" class="display-button" type="button" aria-disabled="true">旋律</button>
+          <button id="tempo-button" type="button">120 BPM</button>
+          <button id="play-button" type="button" aria-pressed="false">播放</button>
+          <button id="loop-length-button" type="button">1 小节</button>
+          <button id="song-mode-button" type="button">Song Mode</button>
+          <button id="eraser-button" class="eraser-button" type="button" aria-pressed="false" aria-label="擦除或替换：录制并播放时按住操作当前轨道">擦除/替换</button>
+          <button id="loop-shift-button" type="button">Loop 移位</button>
+        </div>
+
+        <div id="song-function-strip" class="song-function-strip" aria-label="Song Mode 功能" hidden>
+          <button id="exit-song-mode-button" class="song-back-button" type="button">返回</button>
+          <button id="song-record-button" class="record-button" type="button" aria-pressed="false">录制</button>
+          <button id="song-play-button" type="button" aria-pressed="false">播放</button>
+          <button id="song-eraser-button" class="eraser-button" type="button" aria-pressed="false" aria-label="Song Mode 擦除">擦除</button>
+          <button id="section-length-button" type="button">16 小节</button>
+          <button id="song-scale-button" type="button">音阶</button>
+          <button id="song-tempo-button" type="button">120 BPM</button>
+        </div>
+
+        <div id="scale-panel" class="scale-panel" hidden>
+          <div id="scale-options" class="scale-options" role="group" aria-label="选择音阶"></div>
+          <button id="confirm-scale-button" type="button">确定</button>
+        </div>
+
+        <div id="tempo-panel" class="setting-panel tempo-setting-panel" hidden>
+          <span>Tempo</span>
+          <div class="tempo-controls" role="group" aria-label="调整 Tempo">
+            <button type="button" data-tempo-delta="-10">−10</button>
+            <button type="button" data-tempo-delta="-1">−1</button>
+            <output id="tempo-value">120 BPM</output>
+            <button type="button" data-tempo-delta="1">+1</button>
+            <button type="button" data-tempo-delta="10">+10</button>
+          </div>
+          <button id="tap-tempo-button" type="button" aria-label="Tap Tempo">Tap Tempo</button>
+          <button id="confirm-tempo-button" type="button">确定</button>
+        </div>
+
+        <div id="loop-length-panel" class="setting-panel" hidden>
+          <span>Loop 长度</span>
+          <div id="loop-length-options" class="setting-options loop-length-options" role="group" aria-label="选择 Loop 长度">
+            <button type="button" data-bars="1" aria-pressed="true">1 小节</button>
+            <button type="button" data-bars="2" aria-pressed="false">2 小节</button>
+            <button type="button" data-bars="3" aria-pressed="false">3 小节</button>
+            <button type="button" data-bars="4" aria-pressed="false">4 小节</button>
+            <button type="button" data-bars="5" aria-pressed="false">5 小节</button>
+            <button type="button" data-bars="6" aria-pressed="false">6 小节</button>
+            <button type="button" data-bars="7" aria-pressed="false">7 小节</button>
+            <button type="button" data-bars="8" aria-pressed="false">8 小节</button>
+            <button type="button" data-bars="9" aria-pressed="false">9 小节</button>
+            <button type="button" data-bars="10" aria-pressed="false">10 小节</button>
+            <button type="button" data-bars="11" aria-pressed="false">11 小节</button>
+            <button type="button" data-bars="12" aria-pressed="false">12 小节</button>
+            <button type="button" data-bars="13" aria-pressed="false">13 小节</button>
+            <button type="button" data-bars="14" aria-pressed="false">14 小节</button>
+            <button type="button" data-bars="15" aria-pressed="false">15 小节</button>
+            <button type="button" data-bars="16" aria-pressed="false">16 小节</button>
+          </div>
+          <button id="confirm-loop-length-button" type="button">确定</button>
+        </div>
+
+        <div id="section-length-panel" class="setting-panel section-length-panel" hidden>
+          <span>段落长度</span>
+          <output id="section-length-value">16 小节</output>
+          <div id="section-base-options" class="section-length-options" role="group" aria-label="基础段落长度">
+            <button type="button" data-section-base="4" aria-pressed="false">4</button>
+            <button type="button" data-section-base="8" aria-pressed="false">8</button>
+            <button type="button" data-section-base="16" aria-pressed="true">16</button>
+            <button type="button" data-section-base="32" aria-pressed="false">32</button>
+          </div>
+          <div id="section-extra-options" class="section-length-options section-extra-options" role="group" aria-label="叠加段落长度">
+            <button type="button" data-section-extra="1" aria-pressed="false">+1</button>
+            <button type="button" data-section-extra="2" aria-pressed="false">+2</button>
+            <button type="button" data-section-extra="4" aria-pressed="false">+4</button>
+            <button type="button" data-section-extra="8" aria-pressed="false">+8</button>
+            <button type="button" data-section-extra="16" aria-pressed="false">+16</button>
+          </div>
+          <button id="confirm-section-length-button" type="button">确定</button>
+        </div>
+
+        <div id="loop-shift-panel" class="setting-panel loop-shift-panel" hidden>
+          <span id="loop-shift-title">Loop 移位</span>
+          <div class="loop-shift-coarse-controls" role="group" aria-label="固定距离移动 Loop">
+            <button type="button" data-loop-shift="-128">前移 1 小节</button>
+            <button type="button" data-loop-shift="128">后移 1 小节</button>
+            <button type="button" data-loop-shift="-32">前移 1 拍</button>
+            <button type="button" data-loop-shift="32">后移 1 拍</button>
+          </div>
+          <label class="loop-shift-fine-control" for="loop-shift-slider">
+            <span>无极</span>
+            <input id="loop-shift-slider" type="range" min="-32" max="32" step="1" value="0" aria-label="无极 Loop 移位，左右各一拍">
+            <span class="loop-shift-range-labels" aria-hidden="true"><span>前移 1 拍</span><span>0</span><span>后移 1 拍</span></span>
+          </label>
+          <button id="confirm-loop-shift-button" type="button">确定</button>
+        </div>
+      </section>
+    </main>
+
+  </body>
+</html>

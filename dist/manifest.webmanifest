@@ -1,0 +1,21 @@
+{
+  "id": "./",
+  "name": "触摸乐器",
+  "short_name": "触摸乐器",
+  "description": "可离线使用的触摸 Loop 乐器",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#202020",
+  "theme_color": "#202020",
+  "categories": ["music", "entertainment"],
+  "icons": [
+    {
+      "src": "./app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
