@@ -39,6 +39,19 @@ cd ~/apps/music-console
 python3 main.py
 ```
 
+如果树莓派已经登录图形桌面，也可以从 Windows 通过 SSH 直接运行同一条命令：
+
+```sh
+cd ~/music-console
+python3 main.py
+```
+
+启动器会自动使用树莓派桌面的默认显示器 `:0` 打开 Chromium，无需手动填写 `DISPLAY` 或 `XAUTHORITY`。SSH 终端保持连接时，程序会在前台运行；关闭 Chromium 窗口即可结束程序。若屏幕使用的不是默认显示器，可临时指定：
+
+```sh
+MUSIC_CONSOLE_DISPLAY=:1 python3 main.py
+```
+
 常用选项：
 
 ```text

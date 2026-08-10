@@ -173,6 +173,30 @@ def browser_command(browser: str, url: str, profile_dir: Path, mode: str) -> lis
     return command
 
 
+def browser_environment() -> dict[str, str]:
+    """Return an environment that can reach the local Raspberry Pi desktop.
+
+    A terminal opened through SSH usually has no DISPLAY variable, even when
+    the same user is already logged into the Raspberry Pi desktop.  Chromium
+    still needs that variable (and the user's X authority file) to open on the
+    connected touchscreen or monitor.
+    """
+    environment = os.environ.copy()
+    if not sys.platform.startswith("linux") or environment.get("DISPLAY"):
+        return environment
+
+    display = environment.get("MUSIC_CONSOLE_DISPLAY", ":0")
+    environment["DISPLAY"] = display
+
+    if not environment.get("XAUTHORITY"):
+        authority_file = Path.home() / ".Xauthority"
+        if authority_file.is_file():
+            environment["XAUTHORITY"] = str(authority_file)
+
+    print(f"未检测到 DISPLAY，尝试在树莓派桌面 {display} 打开 Chromium。")
+    return environment
+
+
 def stop_process(process: subprocess.Popen[bytes]) -> None:
     if process.poll() is not None:
         return
@@ -229,7 +253,10 @@ def main() -> int:
     server_thread.start()
     process: subprocess.Popen[bytes] | None = None
     try:
-        process = subprocess.Popen(browser_command(browser, url, profile_dir, args.mode))
+        process = subprocess.Popen(
+            browser_command(browser, url, profile_dir, args.mode),
+            env=browser_environment(),
+        )
         return process.wait()
     except KeyboardInterrupt:
         return 130
