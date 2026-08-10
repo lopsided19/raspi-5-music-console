@@ -86,6 +86,27 @@ import {
   splitSongClip,
   syncPerformanceLoopsToSong,
 } from "./song.js";
+import {
+  TUTORIAL_VERSION,
+  activeProfileId,
+  clearActiveProfileId,
+  createProfile,
+  loadProfiles,
+  normalizeTutorialProgress,
+  normalizedProfileName,
+  replaceProfile,
+  saveProfiles,
+  scopedStorageKey,
+  setActiveProfileId,
+  validatePin,
+  validateProfileName,
+  verifyProfilePin,
+} from "./profiles.js";
+import {
+  TUTORIAL_CHORD_SEQUENCE,
+  chordSequenceComplete,
+  nextChordProgress,
+} from "./tutorial.js";
 
 function registerOfflineApp() {
   if (!import.meta.env.PROD || !window.isSecureContext || !("serviceWorker" in navigator)) return;
@@ -101,6 +122,7 @@ registerOfflineApp();
 const ARCHIVE_STORAGE_KEY = "music-console-project-v1";
 const AUTOSAVE_STORAGE_KEY = "music-console-autosave-v1";
 const SONG_SPLIT_STORAGE_KEY = "music-console-song-split-v1";
+const LEGACY_MIGRATION_STORAGE_KEY = "music-console-legacy-profile-migration-v1";
 
 const INSTRUMENTS = [
   { id: "melody", label: "旋律", glowColor: "oklch(78% 0.13 95)" },
@@ -112,6 +134,29 @@ const INSTRUMENTS = [
 const TRACK_IDS = INSTRUMENTS.map(({ id }) => id);
 
 const appShell = document.querySelector("#app-shell");
+const authScreen = document.querySelector("#auth-screen");
+const loginForm = document.querySelector("#login-form");
+const registerForm = document.querySelector("#register-form");
+const profileSelect = document.querySelector("#profile-select");
+const loginPinInput = document.querySelector("#login-pin");
+const registerNameInput = document.querySelector("#register-name");
+const registerPinInput = document.querySelector("#register-pin");
+const registerPinConfirmInput = document.querySelector("#register-pin-confirm");
+const showRegisterButton = document.querySelector("#show-register-button");
+const showLoginButton = document.querySelector("#show-login-button");
+const authStatus = document.querySelector("#auth-status");
+const currentProfileName = document.querySelector("#current-profile-name");
+const restartTutorialButton = document.querySelector("#restart-tutorial-button");
+const switchProfileButton = document.querySelector("#switch-profile-button");
+const tutorialOverlay = document.querySelector("#tutorial-overlay");
+const tutorialStepLabel = document.querySelector("#tutorial-step-label");
+const tutorialProgressBar = document.querySelector("#tutorial-progress-bar");
+const tutorialTitle = document.querySelector("#tutorial-title");
+const tutorialBody = document.querySelector("#tutorial-body");
+const tutorialChordSequence = document.querySelector("#tutorial-chord-sequence");
+const tutorialHint = document.querySelector("#tutorial-hint");
+const tutorialPrimaryButton = document.querySelector("#tutorial-primary-button");
+const skipTutorialButton = document.querySelector("#skip-tutorial-button");
 const performanceView = document.querySelector("#performance-view");
 const songSplitHandle = document.querySelector("#song-split-handle");
 const surface = document.querySelector("#touch-surface");
@@ -245,6 +290,10 @@ let songClipMenuState = null;
 let songLoopPickerState = null;
 let songClipSplitState = null;
 let songLoopLengthState = null;
+let profiles = [];
+let activeProfile = null;
+let tutorialTarget = null;
+let shouldMigrateLegacyHistory = false;
 
 const pointerNotes = new Map();
 const pointerPositions = new Map();
@@ -259,6 +308,299 @@ const glows = new Map();
 const eraserPointerIds = new Set();
 let eraserKeyboardHeld = false;
 let projectHistory = new ProjectHistory({ limit: 256 });
+
+const TUTORIAL_STEPS = [
+  {
+    title: "用四个和弦完成第一首歌",
+    body: "你会亲手演奏并录下 C、G、Am、F。所有操作都发生在真实创作界面中。",
+    hint: "大约需要 2 分钟，随时可以跳过或稍后继续。",
+    primary: "开始创作",
+  },
+  {
+    title: "先找到和弦轨道",
+    body: "点击轨道栏里的「和弦」，演奏区会切换成和弦地图。",
+    hint: "闪烁的按钮就是下一步目标。",
+    target: () => instrumentSwitcher.querySelector('[data-instrument="chord"]'),
+  },
+  {
+    title: "练习 C → G → Am → F",
+    body: "依次触摸演奏区中的 C、G、Am、F。每个和弦都先松手，再触摸下一个。",
+    hint: "弹错没关系，从 C 重新开始即可。",
+    chords: true,
+    target: () => surface,
+  },
+  {
+    title: "准备录制",
+    body: "点击「录制」。第一次触摸和弦时，播放会自动开始。",
+    hint: "录制按钮亮起后进入下一步。",
+    target: () => recordButton,
+  },
+  {
+    title: "录下四和弦循环",
+    body: "再次依次演奏 C、G、Am、F，每个和弦保持一会，让它们进入循环。",
+    hint: "系统会自动记录你的演奏。",
+    chords: true,
+    target: () => surface,
+  },
+  {
+    title: "结束录制并试听",
+    body: "再次点击「录制」结束录音。循环会继续播放，你可以马上听到自己的作品。",
+    hint: "你的第一首四和弦作品已经自动保存。",
+    target: () => recordButton,
+  },
+  {
+    title: "第一首歌完成了",
+    body: "你已经学会选择和弦、录制和播放循环。以后登录这个用户会直接进入创作界面。",
+    hint: "可随时从菜单重新打开新手教程。",
+    primary: "完成教程",
+  },
+];
+
+function activeProjectStorageKey(baseKey) {
+  return activeProfile ? scopedStorageKey(baseKey, activeProfile.id) : baseKey;
+}
+
+function activeHistorySessionKey() {
+  return activeProfile ? `user:${activeProfile.id}` : "active";
+}
+
+function migrateLegacyProjectStorage() {
+  if (profiles.length !== 1 || localStorage.getItem(LEGACY_MIGRATION_STORAGE_KEY)) return;
+  shouldMigrateLegacyHistory = true;
+  for (const baseKey of [ARCHIVE_STORAGE_KEY, AUTOSAVE_STORAGE_KEY, SONG_SPLIT_STORAGE_KEY]) {
+    const legacyValue = localStorage.getItem(baseKey);
+    const userKey = activeProjectStorageKey(baseKey);
+    if (legacyValue !== null && localStorage.getItem(userKey) === null) {
+      localStorage.setItem(userKey, legacyValue);
+    }
+  }
+  localStorage.setItem(LEGACY_MIGRATION_STORAGE_KEY, activeProfile.id);
+}
+
+function showAuthMode(mode) {
+  const registering = mode === "register";
+  loginForm.hidden = registering;
+  registerForm.hidden = !registering;
+  showLoginButton.hidden = profiles.length === 0;
+  authStatus.textContent = "";
+  requestAnimationFrame(() => {
+    if (registering) registerNameInput.focus();
+    else profileSelect.focus();
+  });
+}
+
+function updateLoginPinField() {
+  const profile = profiles.find(({ id }) => id === profileSelect.value);
+  const hasPin = Boolean(profile?.pinHash);
+  loginPinInput.value = "";
+  loginPinInput.required = hasPin;
+  loginPinInput.placeholder = hasPin ? "请输入 4～8 位 PIN" : "该用户没有设置 PIN";
+}
+
+function renderProfileOptions() {
+  profileSelect.replaceChildren();
+  const rememberedId = activeProfileId();
+  for (const profile of profiles) {
+    const option = document.createElement("option");
+    option.value = profile.id;
+    option.textContent = profile.name;
+    option.selected = profile.id === rememberedId;
+    profileSelect.append(option);
+  }
+  updateLoginPinField();
+}
+
+function authenticateUser() {
+  profiles = loadProfiles();
+  renderProfileOptions();
+  showAuthMode(profiles.length === 0 ? "register" : "login");
+
+  return new Promise((resolve) => {
+    const finish = (profile) => {
+      activeProfile = profile;
+      setActiveProfileId(profile.id);
+      currentProfileName.textContent = profile.name;
+      migrateLegacyProjectStorage();
+      authScreen.hidden = true;
+      appShell.hidden = false;
+      resolve(profile);
+    };
+
+    loginForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const profile = profiles.find(({ id }) => id === profileSelect.value);
+      if (!profile) {
+        authStatus.textContent = "请选择一个用户";
+        return;
+      }
+      authStatus.textContent = "正在验证…";
+      try {
+        if (!await verifyProfilePin(profile, loginPinInput.value)) {
+          authStatus.textContent = "PIN 不正确";
+          loginPinInput.select();
+          return;
+        }
+        finish(profile);
+      } catch (error) {
+        console.error(error);
+        authStatus.textContent = "无法验证用户，请重试";
+      }
+    });
+
+    registerForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const name = registerNameInput.value;
+      const pin = registerPinInput.value;
+      const nameError = validateProfileName(name);
+      const pinError = validatePin(pin);
+      if (nameError || pinError) {
+        authStatus.textContent = nameError || pinError;
+        return;
+      }
+      if (profiles.some((profile) => profile.nameKey === normalizedProfileName(name))) {
+        authStatus.textContent = "这个昵称已经存在";
+        return;
+      }
+      if (pin !== registerPinConfirmInput.value) {
+        authStatus.textContent = "两次输入的 PIN 不一致";
+        return;
+      }
+
+      authStatus.textContent = "正在创建本地用户…";
+      try {
+        const profile = await createProfile(name, pin);
+        profiles = [...profiles, profile];
+        saveProfiles(profiles);
+        finish(profile);
+      } catch (error) {
+        console.error(error);
+        authStatus.textContent = error instanceof RangeError ? error.message : "创建用户失败，请重试";
+      }
+    });
+  });
+}
+
+function saveActiveTutorial(progress) {
+  if (!activeProfile) return;
+  activeProfile = { ...activeProfile, tutorial: normalizeTutorialProgress(progress) };
+  profiles = replaceProfile(profiles, activeProfile);
+  saveProfiles(profiles);
+}
+
+function clearTutorialTarget() {
+  tutorialTarget?.classList.remove("tutorial-target");
+  tutorialTarget = null;
+  for (const region of document.querySelectorAll(".tutorial-chord-target")) {
+    region.classList.remove("tutorial-chord-target");
+  }
+}
+
+function renderTutorial() {
+  const progress = normalizeTutorialProgress(activeProfile?.tutorial);
+  const stepIndex = Math.min(TUTORIAL_STEPS.length - 1, progress.step);
+  const step = TUTORIAL_STEPS[stepIndex];
+  tutorialOverlay.hidden = false;
+  tutorialStepLabel.textContent = stepIndex === 0
+    ? "新手教程 · 准备"
+    : `新手教程 · ${stepIndex}/${TUTORIAL_STEPS.length - 1}`;
+  tutorialProgressBar.style.width = `${stepIndex / (TUTORIAL_STEPS.length - 1) * 100}%`;
+  tutorialTitle.textContent = step.title;
+  tutorialBody.textContent = step.body;
+  tutorialHint.textContent = step.hint;
+  tutorialChordSequence.hidden = !step.chords;
+  for (const [index, chip] of [...tutorialChordSequence.children].entries()) {
+    chip.classList.toggle("is-complete", index < progress.chordProgress);
+    chip.classList.toggle("is-next", index === progress.chordProgress);
+  }
+  tutorialPrimaryButton.hidden = !step.primary;
+  tutorialPrimaryButton.textContent = step.primary ?? "";
+  skipTutorialButton.hidden = stepIndex === TUTORIAL_STEPS.length - 1;
+
+  clearTutorialTarget();
+  tutorialTarget = step.target?.() ?? null;
+  tutorialTarget?.classList.add("tutorial-target");
+  if (step.chords) {
+    const nextChordId = TUTORIAL_CHORD_SEQUENCE[progress.chordProgress];
+    const nextRegion = [...surface.querySelectorAll(".pop-chord-region")]
+      .find((region) => region.dataset.chordId === nextChordId);
+    nextRegion?.classList.add("tutorial-chord-target");
+  }
+}
+
+function setTutorialStep(step, { chordProgress = 0 } = {}) {
+  saveActiveTutorial({
+    ...activeProfile.tutorial,
+    version: TUTORIAL_VERSION,
+    status: "in-progress",
+    step,
+    chordProgress,
+    completedAt: null,
+  });
+  renderTutorial();
+}
+
+function closeTutorial(status) {
+  clearTutorialTarget();
+  tutorialOverlay.hidden = true;
+  saveActiveTutorial({
+    ...activeProfile.tutorial,
+    version: TUTORIAL_VERSION,
+    status,
+    completedAt: status === "completed" ? new Date().toISOString() : null,
+  });
+  persistAutosaveNow();
+}
+
+function beginTutorial() {
+  if (isSongMode) exitSongMode();
+  if (isPlaying) stopTransport();
+  if (recordArmed) toggleRecord();
+  setTutorialStep(0);
+  setMenuOpen(false);
+}
+
+function showPendingTutorial() {
+  const progress = normalizeTutorialProgress(activeProfile?.tutorial);
+  if (["completed", "skipped"].includes(progress.status)) return;
+  if ([4, 5].includes(progress.step) && !recordArmed) {
+    saveActiveTutorial({ ...progress, status: "in-progress", step: 3, chordProgress: 0 });
+  }
+  renderTutorial();
+}
+
+function observeTutorialInstrument(instrumentId) {
+  if (tutorialOverlay.hidden || instrumentId !== "chord") return;
+  if (normalizeTutorialProgress(activeProfile.tutorial).step === 1) setTutorialStep(2);
+}
+
+function observeTutorialChord(chordId) {
+  if (tutorialOverlay.hidden) return;
+  const progress = normalizeTutorialProgress(activeProfile.tutorial);
+  if (![2, 4].includes(progress.step)) return;
+  if (progress.step === 4 && !recordArmed) return;
+  const chordProgress = nextChordProgress(progress.chordProgress, chordId);
+  saveActiveTutorial({ ...progress, chordProgress });
+  if (chordSequenceComplete(chordProgress)) {
+    setTutorialStep(progress.step + 1);
+  } else {
+    renderTutorial();
+  }
+}
+
+function observeTutorialRecordState(armed) {
+  if (tutorialOverlay.hidden) return;
+  const progress = normalizeTutorialProgress(activeProfile.tutorial);
+  if (progress.step === 3 && armed) setTutorialStep(4);
+  else if (progress.step === 4 && !armed) setTutorialStep(3);
+  else if (progress.step === 5 && !armed) setTutorialStep(6);
+}
+
+async function switchProfile() {
+  persistAutosaveNow();
+  await persistenceChain.catch(() => {});
+  clearActiveProfileId();
+  window.location.reload();
+}
 
 function activateOnPress(button, callback) {
   let lastDirectActivation = -Infinity;
@@ -599,7 +941,7 @@ function songSplitLimits(availableHeight) {
 
 function storedSongSplitRatio() {
   try {
-    const ratio = Number(localStorage.getItem(SONG_SPLIT_STORAGE_KEY));
+    const ratio = Number(localStorage.getItem(activeProjectStorageKey(SONG_SPLIT_STORAGE_KEY)));
     return Number.isFinite(ratio) && ratio >= 0.2 && ratio <= 0.8 ? ratio : null;
   } catch (error) {
     console.error(error);
@@ -609,7 +951,10 @@ function storedSongSplitRatio() {
 
 function persistSongSplitRatio() {
   try {
-    localStorage.setItem(SONG_SPLIT_STORAGE_KEY, String(ensureSongProject().arrangerSplitRatio));
+    localStorage.setItem(
+      activeProjectStorageKey(SONG_SPLIT_STORAGE_KEY),
+      String(ensureSongProject().arrangerSplitRatio)
+    );
   } catch (error) {
     console.error(error);
   }
@@ -1843,14 +2188,14 @@ function persistAutosaveNow() {
   const workingState = currentProjectArchive();
   const session = { version: 1, history: projectHistory.export(), workingState };
   try {
-    localStorage.setItem(AUTOSAVE_STORAGE_KEY, JSON.stringify(workingState));
+    localStorage.setItem(activeProjectStorageKey(AUTOSAVE_STORAGE_KEY), JSON.stringify(workingState));
   } catch (error) {
     console.error(error);
   }
 
   autosaveStatus.textContent = "正在自动保存";
   persistenceChain = persistenceChain
-    .then(() => saveHistorySession(session))
+    .then(() => saveHistorySession(session, activeHistorySessionKey()))
     .then(() => {
       autosaveStatus.textContent = `已自动保存 ${formatArchiveTime(workingState.savedAt)}`;
     })
@@ -1990,6 +2335,9 @@ async function beginNote(event) {
   clearTimeout(recordingPhraseTimer);
   recordingPhraseTimer = 0;
   const point = pointAtPosition(event.clientX, event.clientY);
+  const tutorialChordId = currentInstrumentId === "chord"
+    ? popChordAtPoint(point, livePopChordVoicingState).functionId
+    : null;
   lastLivePointerId = registerPointerPress(pointerPressOrder, event.pointerId);
   storePointerPoint(event.pointerId, point);
 
@@ -2001,6 +2349,7 @@ async function beginNote(event) {
   }
 
   updateActiveRegions();
+  if (tutorialChordId) observeTutorialChord(tutorialChordId);
   updateHistoryControls();
   noteStatus.textContent = "正在演奏";
   await startActiveLiveVoice(event.pointerId);
@@ -2630,6 +2979,7 @@ function toggleRecord() {
   const now = performance.now();
   primeMetronome(now, isPlaying ? transportStartedAt : idleBeatStartedAt);
   if (metronomeMode === "record" && recordArmed) void synth.unlock().catch(console.error);
+  observeTutorialRecordState(recordArmed);
 }
 
 function resetTapTempo() {
@@ -2900,6 +3250,7 @@ function selectInstrument(instrumentId) {
   renderScale();
   updateSongActiveTrackVisuals();
   scheduleAutosave();
+  observeTutorialInstrument(instrumentId);
 }
 
 function setMenuOpen(open) {
@@ -2957,7 +3308,7 @@ function archiveProject() {
   commitFineLoopShift();
   try {
     const archive = currentProjectArchive();
-    localStorage.setItem(ARCHIVE_STORAGE_KEY, JSON.stringify(archive));
+    localStorage.setItem(activeProjectStorageKey(ARCHIVE_STORAGE_KEY), JSON.stringify(archive));
     archiveStatus.textContent = `已保存检查点 ${formatArchiveTime(archive.savedAt)}`;
   } catch (error) {
     console.error(error);
@@ -3005,7 +3356,7 @@ function applyProjectArchive(rawArchive, { preserveCurrentInstrument = false } =
 }
 
 function restoreStoredArchive() {
-  const storedArchive = localStorage.getItem(ARCHIVE_STORAGE_KEY);
+  const storedArchive = localStorage.getItem(activeProjectStorageKey(ARCHIVE_STORAGE_KEY));
   if (!storedArchive) return false;
   const archive = applyProjectArchive(storedArchive);
   archiveStatus.textContent = `已恢复检查点 ${formatArchiveTime(archive.savedAt)}`;
@@ -3016,14 +3367,18 @@ async function initializeProject() {
   let restored = false;
   let fallbackState = null;
   try {
-    const autosavedState = localStorage.getItem(AUTOSAVE_STORAGE_KEY);
+    const autosavedState = localStorage.getItem(activeProjectStorageKey(AUTOSAVE_STORAGE_KEY));
     if (autosavedState) fallbackState = JSON.parse(autosavedState);
   } catch (error) {
     console.error(error);
   }
 
   try {
-    const session = await loadHistorySession();
+    let session = await loadHistorySession(activeHistorySessionKey());
+    if (!session && shouldMigrateLegacyHistory) {
+      session = await loadHistorySession();
+      if (session) await saveHistorySession(session, activeHistorySessionKey());
+    }
     if (session?.history) {
       projectHistory = ProjectHistory.restore(session.history, 256);
       const indexedState = session.workingState ?? projectHistory.current()?.state;
@@ -3245,6 +3600,16 @@ activateOnPress(clearTrackButton, requestClearTrack);
 activateOnPress(archiveButton, archiveProject);
 activateOnPress(releaseTouchesButton, releaseStuckTouches);
 activateOnPress(tapTempoButton, registerTapTempo);
+activateOnPress(showRegisterButton, () => showAuthMode("register"));
+activateOnPress(showLoginButton, () => showAuthMode("login"));
+activateOnPress(restartTutorialButton, beginTutorial);
+activateOnPress(switchProfileButton, () => void switchProfile());
+activateOnPress(skipTutorialButton, () => closeTutorial("skipped"));
+activateOnPress(tutorialPrimaryButton, () => {
+  const progress = normalizeTutorialProgress(activeProfile?.tutorial);
+  if (progress.step === 0) setTutorialStep(1);
+  else if (progress.step === TUTORIAL_STEPS.length - 1) closeTutorial("completed");
+});
 activateOnPress(lengthSongClipButton, openSongLoopLengthEditor);
 activateOnPress(mergeSongClipButton, mergeArrangedSongClip);
 activateOnPress(splitSongClipButton, openSongClipSplitEditor);
@@ -3276,6 +3641,7 @@ loopShiftSlider.addEventListener("change", commitFineLoopShift);
 for (const button of instrumentSwitcher.querySelectorAll("button[data-instrument]")) {
   activateInstrumentButton(button);
 }
+profileSelect.addEventListener("change", updateLoginPinField);
 
 songSplitHandle.addEventListener("pointerdown", (event) => {
   if (event.pointerType === "mouse" && event.button !== 0) return;
@@ -3353,5 +3719,7 @@ window.addEventListener("pagehide", () => {
 
 surface.dataset.recordedSteps = "0";
 updateEraserButtonState();
+await authenticateUser();
 await initializeProject();
+showPendingTutorial();
 ensureIdlePulse();

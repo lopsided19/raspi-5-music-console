@@ -27,24 +27,24 @@ async function openDatabase() {
   return requestResult(request);
 }
 
-export async function loadHistorySession() {
+export async function loadHistorySession(sessionKey = ACTIVE_SESSION_KEY) {
   const database = await openDatabase();
   if (!database) return null;
   try {
     const transaction = database.transaction(STORE_NAME, "readonly");
-    return await requestResult(transaction.objectStore(STORE_NAME).get(ACTIVE_SESSION_KEY));
+    return await requestResult(transaction.objectStore(STORE_NAME).get(sessionKey));
   } finally {
     database.close();
   }
 }
 
-export async function saveHistorySession(session) {
+export async function saveHistorySession(session, sessionKey = ACTIVE_SESSION_KEY) {
   const database = await openDatabase();
   if (!database) return false;
   try {
     const transaction = database.transaction(STORE_NAME, "readwrite");
     const completed = transactionCompletion(transaction);
-    await requestResult(transaction.objectStore(STORE_NAME).put(session, ACTIVE_SESSION_KEY));
+    await requestResult(transaction.objectStore(STORE_NAME).put(session, sessionKey));
     await completed;
     return true;
   } finally {

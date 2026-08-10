@@ -10,11 +10,42 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./app-icon.svg" type="image/svg+xml" />
     <title>触摸乐器</title>
-    <script type="module" crossorigin src="./assets/index-BB85ylOf.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-Bt2mv0av.css">
+    <script type="module" crossorigin src="./assets/index-C1Mu0JDT.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-Lqo8oDqK.css">
   </head>
   <body>
-    <main id="app-shell" class="app-shell">
+    <section id="auth-screen" class="auth-screen" aria-labelledby="auth-title">
+      <div class="auth-card">
+        <div class="auth-brand" aria-hidden="true">MC</div>
+        <p class="auth-eyebrow">Music Console</p>
+        <h1 id="auth-title">开始你的第一首歌</h1>
+        <p class="auth-intro">账号只保存在这台设备上。登录后，你的作品和教程进度会分别保存。</p>
+
+        <form id="login-form" class="auth-form">
+          <label for="profile-select">选择用户</label>
+          <select id="profile-select" name="profile"></select>
+          <label for="login-pin">PIN</label>
+          <input id="login-pin" name="pin" type="password" inputmode="numeric" autocomplete="current-password" maxlength="8" placeholder="没有设置 PIN 可留空" />
+          <button class="auth-primary-button" type="submit">进入 Music Console</button>
+          <button id="show-register-button" class="auth-secondary-button" type="button">创建新用户</button>
+        </form>
+
+        <form id="register-form" class="auth-form" hidden>
+          <label for="register-name">你的昵称</label>
+          <input id="register-name" name="name" type="text" autocomplete="nickname" maxlength="16" placeholder="例如：小明" required />
+          <label for="register-pin">设置 PIN（可选）</label>
+          <input id="register-pin" name="pin" type="password" inputmode="numeric" autocomplete="new-password" maxlength="8" placeholder="4～8 位数字" />
+          <label for="register-pin-confirm">再次输入 PIN</label>
+          <input id="register-pin-confirm" name="pin-confirm" type="password" inputmode="numeric" autocomplete="new-password" maxlength="8" placeholder="没有设置可留空" />
+          <button class="auth-primary-button" type="submit">创建并开始</button>
+          <button id="show-login-button" class="auth-secondary-button" type="button">返回登录</button>
+        </form>
+        <output id="auth-status" class="auth-status" aria-live="polite"></output>
+        <p class="auth-local-note">本机账号 · 无需联网</p>
+      </div>
+    </section>
+
+    <main id="app-shell" class="app-shell" hidden>
       <header class="top-bar">
         <button id="app-menu-button" class="top-beat-button" data-beat="1" type="button" aria-expanded="false" aria-controls="app-menu">菜单</button>
         <button class="top-beat-button" data-beat="2" type="button" aria-label="占位 2" disabled>—</button>
@@ -34,6 +65,11 @@
           <button id="clear-track-button" type="button">清除当前轨道</button>
           <button id="archive-button" type="button">保存检查点</button>
           <span id="autosave-status" class="autosave-status">自动保存准备中</span>
+          <div class="app-menu-profile">
+            <span>当前用户：<strong id="current-profile-name"></strong></span>
+            <button id="restart-tutorial-button" type="button">重新开始新手教程</button>
+            <button id="switch-profile-button" type="button">切换用户</button>
+          </div>
         </div>
       </header>
 
@@ -239,6 +275,26 @@
         </div>
       </section>
     </main>
+
+    <aside id="tutorial-overlay" class="tutorial-overlay" role="dialog" aria-modal="false" aria-labelledby="tutorial-title" hidden>
+      <div class="tutorial-card">
+        <div class="tutorial-progress-row">
+          <span id="tutorial-step-label">新手教程</span>
+          <button id="skip-tutorial-button" class="tutorial-skip-button" type="button">跳过</button>
+        </div>
+        <div class="tutorial-progress-track" aria-hidden="true"><span id="tutorial-progress-bar"></span></div>
+        <h2 id="tutorial-title"></h2>
+        <p id="tutorial-body"></p>
+        <div id="tutorial-chord-sequence" class="tutorial-chord-sequence" aria-label="目标和弦：C、G、Am、F" hidden>
+          <span data-chord-step="0">C</span>
+          <span data-chord-step="1">G</span>
+          <span data-chord-step="2">Am</span>
+          <span data-chord-step="3">F</span>
+        </div>
+        <p id="tutorial-hint" class="tutorial-hint"></p>
+        <button id="tutorial-primary-button" class="tutorial-primary-button" type="button">开始教程</button>
+      </div>
+    </aside>
 
   </body>
 </html>
