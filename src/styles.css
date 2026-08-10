@@ -130,6 +130,16 @@ button:disabled {
   font-size: 0.78rem;
 }
 
+.exit-app-button {
+  border-color: #a64f49;
+  color: #ffaaa1;
+}
+
+.exit-app-button:not(:disabled):active {
+  background: #742d28;
+  color: #fff;
+}
+
 .autosave-status {
   padding: 0.15rem 0.25rem;
   color: #b8b8b8;

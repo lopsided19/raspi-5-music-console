@@ -24,6 +24,10 @@ class MusicConsoleServer(http.server.ThreadingHTTPServer):
     allow_reuse_address = True
     daemon_threads = True
 
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        self.exit_requested = threading.Event()
+        super().__init__(*args, **kwargs)
+
 
 class MusicConsoleHandler(http.server.SimpleHTTPRequestHandler):
     """Serve only the production build from dist/."""
@@ -47,6 +51,18 @@ class MusicConsoleHandler(http.server.SimpleHTTPRequestHandler):
         if request_path == "/sw.js":
             self.send_header("Service-Worker-Allowed", "/")
         super().end_headers()
+
+    def do_POST(self) -> None:
+        if urlsplit(self.path).path != "/__music_console__/exit":
+            self.send_error(http.HTTPStatus.NOT_FOUND)
+            return
+
+        self.send_response(http.HTTPStatus.NO_CONTENT)
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        if isinstance(self.server, MusicConsoleServer):
+            self.server.exit_requested.set()
+            threading.Thread(target=self.server.shutdown, name="music-console-exit", daemon=True).start()
 
     def log_message(self, message_format: str, *args: object) -> None:
         status = str(args[1]) if len(args) > 1 else ""
@@ -257,7 +273,10 @@ def main() -> int:
             browser_command(browser, url, profile_dir, args.mode),
             env=browser_environment(),
         )
-        return process.wait()
+        while process.poll() is None:
+            if server.exit_requested.wait(timeout=0.2):
+                return 0
+        return process.returncode or 0
     except KeyboardInterrupt:
         return 130
     except OSError as error:

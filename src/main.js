@@ -148,6 +148,7 @@ const authStatus = document.querySelector("#auth-status");
 const currentProfileName = document.querySelector("#current-profile-name");
 const restartTutorialButton = document.querySelector("#restart-tutorial-button");
 const switchProfileButton = document.querySelector("#switch-profile-button");
+const exitAppButton = document.querySelector("#exit-app-button");
 const tutorialOverlay = document.querySelector("#tutorial-overlay");
 const tutorialStepLabel = document.querySelector("#tutorial-step-label");
 const tutorialProgressBar = document.querySelector("#tutorial-progress-bar");
@@ -600,6 +601,28 @@ async function switchProfile() {
   await persistenceChain.catch(() => {});
   clearActiveProfileId();
   window.location.reload();
+}
+
+async function exitApplication() {
+  setMenuOpen(false);
+  exitAppButton.disabled = true;
+  exitAppButton.textContent = "正在保存并退出…";
+  archiveStatus.textContent = "正在保存并退出";
+  persistAutosaveNow();
+  await persistenceChain.catch(() => {});
+
+  try {
+    const response = await fetch("/__music_console__/exit", {
+      method: "POST",
+      cache: "no-store",
+    });
+    if (!response.ok) throw new Error(`Exit request failed: ${response.status}`);
+  } catch (error) {
+    console.error(error);
+    exitAppButton.disabled = false;
+    exitAppButton.textContent = "退出应用";
+    archiveStatus.textContent = "无法自动退出，请关闭应用窗口";
+  }
 }
 
 function activateOnPress(button, callback) {
@@ -3604,6 +3627,7 @@ activateOnPress(showRegisterButton, () => showAuthMode("register"));
 activateOnPress(showLoginButton, () => showAuthMode("login"));
 activateOnPress(restartTutorialButton, beginTutorial);
 activateOnPress(switchProfileButton, () => void switchProfile());
+activateOnPress(exitAppButton, () => void exitApplication());
 activateOnPress(skipTutorialButton, () => closeTutorial("skipped"));
 activateOnPress(tutorialPrimaryButton, () => {
   const progress = normalizeTutorialProgress(activeProfile?.tutorial);
